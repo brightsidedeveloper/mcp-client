@@ -11,4 +11,5 @@ class MCPClient {
 }
 
 const client = new MCPClient()
+Object.freeze(client)
 export default client
