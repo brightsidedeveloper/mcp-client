@@ -1,4 +1,3 @@
-import { Tool } from '@anthropic-ai/sdk/resources/messages/messages.mjs'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import dotenv from 'dotenv'
@@ -13,11 +12,9 @@ interface MCPServer {
   command: string
   args: string[]
 }
-
 class MCPClient {
   private mcp: Client
   private transport: StdioClientTransport | null = null
-  private tools: Tool[] = []
   private config: Config
 
   constructor() {
