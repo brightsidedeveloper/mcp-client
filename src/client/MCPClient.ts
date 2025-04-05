@@ -26,7 +26,7 @@ class MCPClient {
   private anthropic: Anthropic
   private transports: Map<string, StdioClientTransport> = new Map()
   private tools: Tool[] = []
-  private toolNameMapping: Map<string, string> = new Map() // Map prefixed name to original name
+  private toolNameMapping: Map<string, string> = new Map()
   private config!: Config
 
   private constructor() {
@@ -164,7 +164,6 @@ class MCPClient {
       const toolsResult = await this.mcp.listTools()
       const serverTools = toolsResult.tools.map((tool) => {
         const prefixedName = `${serverName}_${tool.name}`
-        // Store the mapping of prefixed name to original name
         this.toolNameMapping.set(prefixedName, tool.name)
         return {
           name: `${serverName}_${tool.name}`,

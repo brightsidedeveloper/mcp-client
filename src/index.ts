@@ -7,7 +7,7 @@ const app = new Hono()
 
 const apiKeyMiddleware = async (c: any, next: () => Promise<void>) => {
   const apiKey: string | undefined = c.req.header('X-API-Key')
-  const validApiKey: string = 'tim' // Replace with your actual API key
+  const validApiKey: string = 'tim'
 
   if (!apiKey || apiKey !== validApiKey) {
     return c.json(
