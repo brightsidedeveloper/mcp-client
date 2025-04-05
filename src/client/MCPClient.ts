@@ -2,9 +2,10 @@ import Anthropic from '@anthropic-ai/sdk'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import readline from 'readline/promises'
+import * as fs from 'fs'
 
 import dotenv from 'dotenv'
-import { MessageParam } from '@anthropic-ai/sdk/resources/index.mjs'
+import { MessageParam, Tool } from '@anthropic-ai/sdk/resources/index.mjs'
 dotenv.config()
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
@@ -17,12 +18,7 @@ interface Config {
 interface MCPServer {
   command: string
   args: string[]
-}
-
-interface Tool {
-  name: string
-  description?: string
-  input_schema: any
+  env?: Record<string, string>
 }
 
 class MCPClient {
@@ -30,19 +26,32 @@ class MCPClient {
   private anthropic: Anthropic
   private transports: Map<string, StdioClientTransport> = new Map()
   private tools: Tool[] = []
-  private config: Config
+  private toolNameMapping: Map<string, string> = new Map() // Map prefixed name to original name
+  private config!: Config
 
-  constructor() {
+  private constructor() {
     this.anthropic = new Anthropic({
       apiKey: ANTHROPIC_API_KEY,
     })
     this.mcp = new Client({ name: 'mcp-client', version: '1.0.0' })
-    this.config = this.getConfig()
+    this.config = this.loadConfig()
+  }
+
+  private static instance: MCPClient
+  public static getInstance(): MCPClient {
+    if (!MCPClient.instance) {
+      MCPClient.instance = new MCPClient()
+    }
+    return MCPClient.instance
   }
 
   public async connectToServers() {
     const serverPromises = Object.entries(this.config.mcpServers).map(([serverName, server]) => this.connectToServer(serverName, server))
     await Promise.all(serverPromises)
+  }
+
+  public async prompt(message: string) {
+    return this.processQuery(message)
   }
 
   public async chatLoop() {
@@ -74,14 +83,14 @@ class MCPClient {
     await this.mcp.close()
   }
 
-  private getConfig(): Config {
-    return {
-      mcpServers: {
-        email: {
-          command: 'node',
-          args: ['/Users/timvanlerberg/Desktop/mcp-2/build/index.js'],
-        },
-      },
+  private loadConfig(): Config {
+    const configPath = './config.json'
+    try {
+      const configContent = fs.readFileSync(configPath, 'utf-8')
+      return JSON.parse(configContent) as Config
+    } catch (error) {
+      console.error('Failed to load config.json:', error)
+      throw new Error('Config file is required')
     }
   }
 
@@ -92,8 +101,6 @@ class MCPClient {
         content: query,
       },
     ]
-
-    console.log(this.tools)
 
     const response = await this.anthropic.messages.create({
       model: 'claude-3-5-sonnet-20241022',
@@ -110,10 +117,11 @@ class MCPClient {
         finalText.push(content.text)
       } else if (content.type === 'tool_use') {
         const toolName = content.name
+        const originalToolName = this.toolNameMapping.get(toolName)!
         const toolArgs = content.input as { [x: string]: unknown } | undefined
 
         const result = await this.mcp.callTool({
-          name: toolName,
+          name: originalToolName,
           arguments: toolArgs,
         })
         toolResults.push(result)
@@ -140,29 +148,30 @@ class MCPClient {
   private async connectToServer(serverName: string, server: MCPServer) {
     try {
       const scriptPath = server.args[0]
-      const isJs = scriptPath.endsWith('.js')
       const isPy = scriptPath.endsWith('.py')
-
-      if (!isJs && !isPy) {
-        throw new Error(`Server script for ${serverName} must be a .js or .py file`)
-      }
 
       const command = server.command || (isPy ? (process.platform === 'win32' ? 'python' : 'python3') : process.execPath)
 
       const transport = new StdioClientTransport({
         command,
         args: server.args,
+        env: server.env,
       })
 
       this.transports.set(serverName, transport)
       this.mcp.connect(transport)
 
       const toolsResult = await this.mcp.listTools()
-      const serverTools = toolsResult.tools.map((tool) => ({
-        name: `${serverName}_${tool.name}`,
-        description: tool.description,
-        input_schema: tool.inputSchema,
-      }))
+      const serverTools = toolsResult.tools.map((tool) => {
+        const prefixedName = `${serverName}_${tool.name}`
+        // Store the mapping of prefixed name to original name
+        this.toolNameMapping.set(prefixedName, tool.name)
+        return {
+          name: `${serverName}_${tool.name}`,
+          description: tool.description,
+          input_schema: tool.inputSchema,
+        }
+      })
 
       this.tools.push(...serverTools)
       console.log(
@@ -176,6 +185,6 @@ class MCPClient {
   }
 }
 
-const client = new MCPClient()
+const client = MCPClient.getInstance()
 Object.freeze(client)
 export default client
