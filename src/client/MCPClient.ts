@@ -38,7 +38,40 @@ class MCPClient {
     })
     this.mcp = new Client({ name: 'mcp-client', version: '1.0.0' })
     this.config = this.getConfig()
-    this.connectToServers()
+  }
+
+  public async connectToServers() {
+    const serverPromises = Object.entries(this.config.mcpServers).map(([serverName, server]) => this.connectToServer(serverName, server))
+    await Promise.all(serverPromises)
+  }
+
+  public async chatLoop() {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    })
+
+    try {
+      console.log('\nMCP Client Started!')
+      console.log("Type your queries or 'quit' to exit.")
+
+      while (true) {
+        const message = await rl.question('\nQuery: ')
+        if (message.toLowerCase() === 'quit') {
+          break
+        }
+        const response = await this.processQuery(message)
+        console.log('\n' + response)
+      }
+    } catch (e) {
+      console.log('Error:', e)
+    } finally {
+      rl.close()
+    }
+  }
+
+  public async cleanup() {
+    await this.mcp.close()
   }
 
   private getConfig(): Config {
@@ -52,13 +85,15 @@ class MCPClient {
     }
   }
 
-  async processQuery(query: string) {
+  private async processQuery(query: string) {
     const messages: MessageParam[] = [
       {
         role: 'user',
         content: query,
       },
     ]
+
+    console.log(this.tools)
 
     const response = await this.anthropic.messages.create({
       model: 'claude-3-5-sonnet-20241022',
@@ -102,38 +137,6 @@ class MCPClient {
     return finalText.join('\n')
   }
 
-  async chatLoop() {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    })
-
-    try {
-      console.log('\nMCP Client Started!')
-      console.log("Type your queries or 'quit' to exit.")
-
-      while (true) {
-        const message = await rl.question('\nQuery: ')
-        if (message.toLowerCase() === 'quit') {
-          break
-        }
-        const response = await this.processQuery(message)
-        console.log('\n' + response)
-      }
-    } finally {
-      rl.close()
-    }
-  }
-
-  public async cleanup() {
-    await this.mcp.close()
-  }
-
-  public async connectToServers() {
-    const serverPromises = Object.entries(this.config.mcpServers).map(([serverName, server]) => this.connectToServer(serverName, server))
-    await Promise.all(serverPromises)
-  }
-
   private async connectToServer(serverName: string, server: MCPServer) {
     try {
       const scriptPath = server.args[0]
@@ -156,7 +159,7 @@ class MCPClient {
 
       const toolsResult = await this.mcp.listTools()
       const serverTools = toolsResult.tools.map((tool) => ({
-        name: `${serverName}.${tool.name}`,
+        name: `${serverName}_${tool.name}`,
         description: tool.description,
         input_schema: tool.inputSchema,
       }))
