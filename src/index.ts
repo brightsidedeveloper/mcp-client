@@ -1,13 +1,13 @@
 import client from './client/MCPClient.js'
-import { Hono } from 'hono'
+import { Context, Hono } from 'hono'
 import { serve } from '@hono/node-server'
 import { sleep } from '@anthropic-ai/sdk/core.mjs'
 
 const app = new Hono()
 
-const apiKeyMiddleware = async (c: any, next: () => Promise<void>) => {
+const apiKeyMiddleware = async (c: Context, next: () => Promise<void>) => {
   const apiKey: string | undefined = c.req.header('X-API-Key')
-  const validApiKey: string = 'tim'
+  const validApiKey = 'tim'
 
   if (!apiKey || apiKey !== validApiKey) {
     return c.json(
@@ -31,7 +31,7 @@ app.post('/api/prompt', async (c) => {
   return c.json(response)
 })
 
-app.onError((err: Error, c) => {
+app.onError((err, c) => {
   console.error(err)
   return c.json(
     {
@@ -42,7 +42,7 @@ app.onError((err: Error, c) => {
   )
 })
 
-const port: number = 3000
+const port = 3000
 
 async function main() {
   try {
